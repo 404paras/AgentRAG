@@ -20,15 +20,9 @@ export const initializePinecone = async (): Promise<Pinecone> => {
     apiKey: apiKey,
   });
 
-  console.log('✅ Pinecone client initialized');
+  console.log('Pinecone client initialized');
   return pineconeClient;
 };
-
-/**
- * Get or create a Pinecone index
- * @param indexName - Name of the index
- * @param dimension - Vector dimension (e.g., 1536 for OpenAI embeddings, 768 for sentence-transformers)
- */
 
 export const getOrCreateIndex = async (
   indexName: string = 'agentrag-notes',
@@ -37,14 +31,12 @@ export const getOrCreateIndex = async (
   const pc = await initializePinecone();
 
   try {
-    // Check if index exists
     const indexes = await pc.listIndexes();
     const indexExists = indexes.indexes?.some(index => index.name === indexName);
 
     if (!indexExists) {
       console.log(`Creating index: ${indexName}`);
       
-      // Create index with pod-based configuration
       await pc.createIndex({
         name: indexName,
         dimension: dimension,
@@ -58,9 +50,9 @@ export const getOrCreateIndex = async (
         waitUntilReady: true,
       });
 
-      console.log(`✅ Index ${indexName} created successfully`);
+      console.log(`Index ${indexName} created successfully`);
     } else {
-      console.log(`✅ Index ${indexName} already exists`);
+      console.log(`Index ${indexName} already exists`);
     }
 
     return pc.index(indexName);
@@ -70,11 +62,6 @@ export const getOrCreateIndex = async (
   }
 };
 
-/**
- * Upsert vectors to Pinecone
- * @param indexName - Name of the index
- * @param vectors - Array of vectors with id, values, and metadata
- */
 export const upsertVectors = async (
   indexName: string,
   vectors: Array<{
@@ -87,7 +74,7 @@ export const upsertVectors = async (
   
   try {
     await index.upsert(vectors);
-    console.log(`✅ Upserted ${vectors.length} vectors to ${indexName}`);
+    console.log(`Upserted ${vectors.length} vectors to ${indexName}`);
     return { success: true, count: vectors.length };
   } catch (error) {
     console.error('Error upserting vectors:', error);
@@ -95,13 +82,6 @@ export const upsertVectors = async (
   }
 };
 
-/**
- * Query vectors from Pinecone
- * @param indexName - Name of the index
- * @param vector - Query vector
- * @param topK - Number of results to return
- * @param filter - Metadata filter
- */
 export const queryVectors = async (
   indexName: string,
   vector: number[],
@@ -130,11 +110,6 @@ export const queryVectors = async (
   }
 };
 
-/**
- * Delete vectors from Pinecone
- * @param indexName - Name of the index
- * @param ids - Array of vector IDs to delete
- */
 export const deleteVectors = async (
   indexName: string,
   ids: string[]
@@ -143,7 +118,7 @@ export const deleteVectors = async (
   
   try {
     await index.deleteMany(ids);
-    console.log(`✅ Deleted ${ids.length} vectors from ${indexName}`);
+    console.log(`Deleted ${ids.length} vectors from ${indexName}`);
     return { success: true, count: ids.length };
   } catch (error) {
     console.error('Error deleting vectors:', error);
@@ -151,15 +126,12 @@ export const deleteVectors = async (
   }
 };
 
-/**
- * Delete all vectors in an index (use with caution!)
- */
 export const deleteAllVectors = async (indexName: string) => {
   const index = await getOrCreateIndex(indexName);
   
   try {
     await index.deleteAll();
-    console.log(`✅ Deleted all vectors from ${indexName}`);
+    console.log(`Deleted all vectors from ${indexName}`);
     return { success: true };
   } catch (error) {
     console.error('Error deleting all vectors:', error);

@@ -4,6 +4,8 @@ import { Input } from "../components/ui/input"
 import { Button } from "../components/ui/button"
 import { SendHorizontal, ArrowLeft, Sparkles } from "lucide-react"
 import { useNavigate } from "react-router-dom"
+import { sendChatMessage, getNote } from "../services/api"
+import { getUserId } from "../utils/userStorage"
 import "../styles/chat.css"
 
 interface Message {
@@ -11,16 +13,27 @@ interface Message {
   role: 'user' | 'assistant';
   content: string;
   timestamp: Date;
+  sources?: Array<{ content: string; score: number }>;
 }
 
 function Chat() {
   const { noteId } = useParams<{noteId:string}>();
   const navigate = useNavigate();
+  const [noteTitle, setNoteTitle] = useState<string>('this note');
   const [messages, setMessages] = useState<Message[]>([]);
   const [inputValue, setInputValue] = useState('');
   const [isTyping, setIsTyping] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+
+  // Fetch note title on mount
+  useEffect(() => {
+    if (noteId) {
+      getNote(noteId)
+        .then(note => setNoteTitle(note.title))
+        .catch(err => console.error('Error fetching note:', err));
+    }
+  }, [noteId]);
 
   // Auto-scroll to bottom when new messages arrive
   const scrollToBottom = () => {
@@ -37,7 +50,7 @@ function Chat() {
   }, []);
 
   const handleSendMessage = async () => {
-    if (!inputValue.trim()) return;
+    if (!inputValue.trim() || !noteId) return;
 
     const userMessage: Message = {
       id: Date.now(),
@@ -50,17 +63,33 @@ function Chat() {
     setInputValue('');
     setIsTyping(true);
 
-    // Simulate AI response (replace with actual API call)
-    setTimeout(() => {
+    try {
+      const userId = getUserId();
+      const response = await sendChatMessage(noteId, inputValue, userId);
+      
       const assistantMessage: Message = {
         id: Date.now() + 1,
         role: 'assistant',
-        content: `This is a simulated response to: "${userMessage.content}". In a real implementation, this would connect to your RAG backend to query the note (ID: ${noteId}) and provide intelligent answers based on the document content.`,
+        content: response.response,
+        timestamp: new Date(),
+        sources: response.sources
+      };
+      
+      setMessages(prev => [...prev, assistantMessage]);
+    } catch (error: any) {
+      console.error('Error sending message:', error);
+      
+      const errorMessage: Message = {
+        id: Date.now() + 1,
+        role: 'assistant',
+        content: `Sorry, I encountered an error: ${error.response?.data?.message || error.message || 'Unknown error'}. Please try again.`,
         timestamp: new Date()
       };
-      setMessages(prev => [...prev, assistantMessage]);
+      
+      setMessages(prev => [...prev, errorMessage]);
+    } finally {
       setIsTyping(false);
-    }, 3000);
+    }
   };
 
   const handleKeyPress = (e: React.KeyboardEvent) => {
@@ -82,7 +111,7 @@ function Chat() {
           <ArrowLeft className="w-5 h-5" />
         </Button>
         <div className="chat-header-content">
-          <h1 className="chat-title">Chat with Note {noteId}</h1>
+          <h1 className="chat-title">Chat with {noteTitle}</h1>
           <p className="chat-subtitle">Ask questions about your document</p>
         </div>
       </div>
