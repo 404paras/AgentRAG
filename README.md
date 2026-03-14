@@ -18,7 +18,7 @@ Browser (React 19 + Vite)
         ↕  HTTP (internal)
   Python FastAPI  (RAG service v2)
         ↕
-Pinecone (vector store)       LLM: Groq (Llama 3.3 70B) / Gemini 2.0 Flash
+Pinecone (vector store)       LLM: Groq  / Gemini
                               Serper + CrewAI  (web-search fallback)
 ```
 
@@ -226,21 +226,9 @@ The FastAPI service (v2) receives per-request, pre-decrypted LLM credentials fro
 
 If the Python service is unreachable, the Node backend automatically returns a plain-text excerpt from the top Pinecone chunk as a fallback.
 
-**Supported LLM providers:**
-
-| Provider | Model | Key |
-|----------|-------|-----|
-| Groq *(default)* | `llama-3.3-70b-versatile` | `GROQ_API_KEY` |
-| Google Gemini | `gemini-2.0-flash` | `GEMINI_API_KEY` |
 
 > The CrewAI web-search crew also uses these same keys (Gemini preferred for CrewAI, Groq as fallback).
 
-**Embedding providers (Node backend):**
-
-| Provider | Model | Dimensions | Key |
-|----------|-------|-----------|-----|
-| Google Gemini *(primary)* | `gemini-embedding-001` | 768 | `GEMINI_API_KEY` |
-| HuggingFace *(fallback)* | `all-mpnet-base-v2` | 768 | `HUGGINGFACE_API_KEY` |
 
 ---
 
