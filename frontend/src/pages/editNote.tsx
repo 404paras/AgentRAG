@@ -5,6 +5,7 @@ import { Input } from "../components/ui/input";
 import { Label } from "../components/ui/label";
 import { ArrowLeft, Save, X, FileText } from "lucide-react";
 import useStore from "../store/store";
+import { getNote, updateNote } from "../services/api";
 import "../styles/editNote.css";
 
 interface noteData {
@@ -17,8 +18,10 @@ const EditNote = () => {
     const navigate = useNavigate();
     const { isEditEnabled, disableEdit } = useStore();
     const [noteData, setNoteData] = useState<noteData>({ title: "", content: "" });
+    const [originalData, setOriginalData] = useState<noteData>({ title: "", content: "" });
     const [isEditing, setIsEditing] = useState(false);
     const [isSaving, setIsSaving] = useState(false);
+    const [isLoading, setIsLoading] = useState(true);
     const [hasChanges, setHasChanges] = useState(false);
 
     useEffect(() => {
@@ -29,35 +32,48 @@ const EditNote = () => {
     }, [noteId, isEditEnabled]);
 
     const fetchData = async () => {
+        if (!noteId) return;
+        
         try {
-            const simulatedData = {
-                title: `Note ${noteId}`,
-                content: "This is the content of your note. Click Edit to modify it."
+            setIsLoading(true);
+            const note = await getNote(noteId);
+            const data = {
+                title: note.title,
+                content: note.content
             };
-            setNoteData(simulatedData);
+            setNoteData(data);
+            setOriginalData(data);
         } catch (error) {
             console.error("Error fetching note data:", error);
+            alert("Failed to load note");
+            navigate('/notes');
+        } finally {
+            setIsLoading(false);
         }
     };
 
     const handleSave = async () => {
+        if (!noteId) return;
+        
         setIsSaving(true);
         try {
-            console.log("Saving note:", noteData);
-            await new Promise(resolve => setTimeout(resolve, 500));
+            await updateNote(noteId, noteData.title, noteData.content);
+            setOriginalData(noteData);
             setIsEditing(false);
             setHasChanges(false);
-        } catch (error) {
+            alert('Note saved successfully!');
+        } catch (error: any) {
             console.error("Error saving note:", error);
+            alert(error.response?.data?.message || "Failed to save note");
         } finally {
             setIsSaving(false);
         }
     };
 
     const handleCancel = () => {
+        setNoteData(originalData);
         setIsEditing(false);
         disableEdit();
-        fetchData();
         setHasChanges(false);
     };
 
@@ -68,6 +84,12 @@ const EditNote = () => {
 
     return (
         <div className="edit-note-container">
+            {isLoading ? (
+                <div className="text-center py-10">
+                    <p>Loading note...</p>
+                </div>
+            ) : (
+                <>
             <div className="edit-note-header">
                 <Button
                     variant="ghost"
@@ -172,6 +194,8 @@ const EditNote = () => {
                     </div>
                 </div>
             </div>
+                </>
+            )}
         </div>
     );
 };

@@ -1,0 +1,18 @@
+# Core FastAPI dependencies
+fastapi>=0.115.0
+uvicorn>=0.34.0
+pydantic>=2.10.0
+python-dotenv>=1.0.0
+
+# LangChain dependencies  
+langchain>=0.3.20
+langchain-community>=0.3.19
+langchain-groq>=0.2.0
+langchain-google-genai>=2.0.0
+
+# CrewAI for agentic RAG (compatible with Python 3.12)
+crewai>=0.86.0,<1.0.0
+crewai-tools>=0.25.0
+
+# Additional dependencies
+groq>=0.11.0
