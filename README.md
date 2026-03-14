@@ -1,7 +1,12 @@
 # DocPal
 
+
 **DocPal** is a full-stack AI document assistant. Upload documents, then chat with them using your choice of LLM provider. A Python RAG/agent service handles retrieval and generation, with an optional live web-search fallback powered by CrewAI + Serper when the document doesn't contain enough information.
 
+
+The system combines Retrieval Augmented Generation (RAG), vector search, and agent-based web retrieval to answer questions from uploaded documents. If the document context is insufficient, the system automatically falls back to live web search using CrewAI agents.
+
+Users can also configure their own LLM provider keys, allowing DocPal to dynamically switch between multiple model providers.
 ---
 
 ## Architecture
