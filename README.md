@@ -1,465 +1,219 @@
-# AgentRAG
+# DocPal
 
-AgentRAG is a full‑stack prototype for an **agentic RAG (Retrieval‑Augmented Generation)** notes assistant. It lets users upload or manage notes, then chat with an AI that can answer questions based on those documents, optionally falling back to web‑based retrieval when local knowledge is insufficient.
-
-The project is split into a **TypeScript/Express + MongoDB backend** and a **React + Vite frontend**, with an experimental **Python RAG/agent pipeline** using LangChain, FAISS, HuggingFace embeddings, Groq, Gemini, and CrewAI.
+**DocPal** is a full-stack AI document assistant. Upload notes or documents, then chat with them using a choice of LLM providers. A Python RAG/agent service handles retrieval and generation, with optional web-search fallback via CrewAI + Serper.
 
 ---
 
-## High‑Level Architecture
+## Architecture
 
-- **Frontend (`frontend/`)**: React (Vite + TypeScript) single‑page app.
-  - Provides pages for:
-    - Choosing between uploading notes and chatting (`Option` page).
-    - Listing notes and viewing file metadata (`NotesPage`).
-    - Viewing/editing a specific note (`EditNote`).
-    - Chatting with a specific note (`Chat`).
-  - Uses **Zustand** for small UI state (edit mode), **Radix UI + custom CSS** for styling, and **React Router** for navigation.
-
-- **Backend (`backend/`)**: Node.js + Express + MongoDB (Mongoose).
-  - Exposes REST APIs to manage **users** and **notes**.
-  - Stores note metadata (pages, size, type, uploadedOn, text length).
-  - Provides a health check endpoint and an `/api` router.
-  - Includes a **Pinecone helper module** to manage vector indices for note embeddings (index creation, upsert, query, delete).
-
-- **Python RAG/Agent Layer (`backend/RAG/`)**:
-  - `main.py` demonstrates an **agentic RAG pipeline**:
-    - Loads a local document (`document.txt`), chunks it, and builds a **FAISS** vector store with **HuggingFaceEmbeddings**.
-    - Uses a **ChatGroq** LLM and a separate **CrewAI** LLM (Gemini) for:
-      - Deciding whether a query can be answered from local documents.
-      - If yes, retrieving local context from the vector store.
-      - If no, invoking a **SerperDevTool + ScrapeWebsiteTool** crew to retrieve and scrape web pages.
-    - Generates a final answer by combining the chosen context with the user query.
-
-The current frontend chat is wired to a **simulated response**, but the architecture is ready to be hooked to the TypeScript/Pinecone or Python RAG backend for full end‑to‑end behavior.
-
----
-
-## Backend Details (`backend/`)
-
-### Tech Stack
-
-- **Runtime**: Node.js (ESM), TypeScript
-- **Framework**: Express
-- **Database**: MongoDB via Mongoose
-- **Vector Store**: Pinecone (via `@pinecone-database/pinecone`)
-- **Config**: `dotenv`
-
-### Entry Point: `index.ts`
-
-- Loads environment variables with `dotenv.config()`.
-- Creates an Express app and configures JSON parsing.
-- Registers:
-  - `GET /` – health check endpoint.
-  - `app.use('/api', router)` – main API routes.
-- Connects to MongoDB with `mongoose.connect(MONGODB_URI)`:
-  - `MONGODB_URI` from env or defaults to `mongodb://localhost:27017/agentrag`.
-  - On success, starts the server on `PORT` (default `3000`).
-
-### Data Models (`model/`)
-
-- **User (`model/user.ts`)**
-  - Fields:
-    - `emailId` (string, required, unique)
-    - `password` (string, required) – stored as plain text in this prototype; in production, this must be hashed.
-    - `notes` – array of ObjectIds referencing `Notes` documents.
-  - Timestamps enabled.
-
-- **Notes (`model/notes.ts`)**
-  - Fields:
-    - `title` (string, required)
-    - `content` (string, required)
-    - `metaData` (embedded object, required):
-      - `filePages` (number)
-      - `fileSize` (string)
-      - `fileType` (`pdf | docx | doc | txt`)
-      - `uploadedOn` (Date)
-      - `textLength` (number)
-
-### API Routes (`routes/routes.ts`)
-
-All routes are mounted under `/api`.
-
-- **GET `/api/notes/:userId`**
-  - Fetches a user by `userId` and populates the `notes` array.
-  - **Success (200)**: `{ success: true, notes: [...] }`
-  - **404** if user not found.
-
-- **GET `/api/note/:noteId`**
-  - Fetches a single note by `noteId`.
-  - **Success (200)**: `{ success: true, note }`
-  - **404** if note not found.
-
-- **POST `/api/note`**
-  - Creates a new note and associates it to a user.
-  - **Body**:
-    ```json
-    {
-      "userId": "<user-id>",
-      "title": "My note",
-      "content": "Note content",
-      "metaData": {   // optional; default is auto‑generated
-        "filePages": 1,
-        "fileSize": "1234 chars",
-        "fileType": "txt",
-        "uploadedOn": "2024-01-01T00:00:00.000Z",
-        "textLength": 1234
-      }
-    }
-    ```
-  - If `metaData` is not provided, a simple default is constructed from the content length.
-  - **Success (201)**: `{ success: true, message: 'Note created successfully', note }`.
-
-- **PUT `/api/note/:noteId`**
-  - Updates `title` and/or `content` of a note.
-  - Automatically updates `metaData.textLength` when content changes.
-  - **Success (200)**: `{ success: true, message: 'Note updated successfully', note }`.
-
-- **DELETE `/api/note/:noteId`**
-  - Deletes a note by `noteId`.
-  - Optional `userId` in the body to also pull the note from the user’s `notes` array.
-  - **Success (200)**: `{ success: true, message: 'Note deleted successfully' }`.
-
-- **POST `/api/user`**
-  - Registers a new user.
-  - **Body**: `{ "emailId": "user@example.com", "password": "plain-text" }`.
-  - Returns 409 if `emailId` is already registered.
-  - **Success (201)**: `{ success: true, message: 'User created successfully', user: { id, emailId } }`.
-
-### Pinecone Utilities (`pinecode.ts`)
-
-This module encapsulates interaction with a Pinecone index for vector‑based retrieval over notes.
-
-- **`initializePinecone()`**
-  - Creates a singleton `Pinecone` client using `PINECONE_API_KEY` (required env var).
-
-- **`getOrCreateIndex(indexName = 'agentrag-notes', dimension = 1536)`**
-  - Lists existing indexes.
-  - Creates an index with cosine similarity and serverless config (AWS `us-east-1`) if it does not exist.
-  - Returns an index handle.
-
-- **`upsertVectors(indexName, vectors)`**
-  - Upserts an array of `{ id, values, metadata? }` vectors into the given index.
-
-- **`queryVectors(indexName, vector, topK = 5, filter?)`**
-  - Queries nearest neighbors for a query vector with optional metadata filter.
-
-- **`deleteVectors(indexName, ids)` / `deleteAllVectors(indexName)`**
-  - Deletes specific vectors or clears the entire index.
-
-> **Note:** Currently there is no wiring between these Pinecone helpers and the Express routes; integration would involve generating embeddings for each note and calling `upsertVectors` on create/update, and `queryVectors` for chat queries.
-
-### Backend Scripts
-
-- `npm run dev` – run backend in watch mode with `nodemon` and `tsx`.
-- `npm start` – run backend once via `tsx`.
-
-### Required Environment Variables
-
-Create `backend/.env` with at least:
-
-```bash
-MONGODB_URI=mongodb://localhost:27017/agentrag
-PORT=3000
-PINECONE_API_KEY=your-pinecone-api-key
+```
+Browser (React + Vite)
+    ↕ REST (JWT auth)
+Node/Express + MongoDB
+    ↕ HTTP
+Python FastAPI (RAG service)
+    ↕
+Pinecone (vector store)   LLM provider (Groq / Gemini / Anthropic)
+                          Serper + CrewAI (web search fallback)
 ```
 
-(If `MONGODB_URI` and `PORT` are omitted, the defaults above are used.)
+| Layer | Stack |
+|---|---|
+| Frontend | React 19, TypeScript, Vite, Tailwind v4, React Router, Zustand |
+| Backend | Node.js, Express, TypeScript, MongoDB/Mongoose, JWT, bcrypt |
+| RAG service | Python, FastAPI, LangChain, CrewAI, Pinecone |
 
 ---
 
-## Python RAG / Agent Layer (`backend/RAG/main.py`)
+## Features
 
-This module demonstrates an **agentic RAG flow** that can later be exposed as an API and called from the Node backend or directly from the frontend.
-
-### Components
-
-- **Vector Store**: FAISS in‑memory index built from `document.txt`.
-- **Embeddings**: `sentence-transformers/all-mpnet-base-v2` via `HuggingFaceEmbeddings`.
-- **LLMs**:
-  - `ChatGroq` (model `llama-3.3-70b-versatile`) used for routing and final answer generation.
-  - `CrewAI` `LLM` wrapper around Gemini (`gemini-2.5-flash`) used within agents.
-- **Tools**:
-  - `SerperDevTool` for web search.
-  - `ScrapeWebsiteTool` for scraping contents of selected pages.
-- **Agents & Tasks** (`Crew`):
-  - Web search agent: finds the best page for a topic.
-  - Web scraping agent: extracts and summarizes the chosen page.
-
-### Core Functions
-
-- **`check_local_knowledge(query, context)`**
-  - Asks the LLM (ChatGroq) whether the provided `context` is sufficient to answer `query`.
-  - Returns `True` if the answer is `"Yes"` (strict single‑word answer), else `False`.
-
-- **`setup_web_scraping_agent()` / `get_web_content(query)`**
-  - Builds a two‑agent crew (search + scraper) and runs it with the given topic.
-
-- **`setup_vector_db(txt_path)`**
-  - Loads a local text file, splits into chunks, and builds a FAISS store using HuggingFace embeddings.
-
-- **`get_local_content(vector_db, query)`**
-  - Runs similarity search (`k=5`) and returns concatenated page content as context.
-
-- **`generate_final_answer(context, query)`**
-  - Calls ChatGroq with system + human messages to generate the final natural‑language answer.
-
-- **`process_query(query, vector_db, local_context)`**
-  - Orchestrates the full routing:
-    1. Decide whether to answer from local documents.
-    2. Retrieve local or web context accordingly.
-    3. Generate final answer from the chosen context.
-
-- **`main()`**
-  - Example CLI entrypoint that:
-    - Builds a vector DB from `document.txt`.
-    - Initializes `local_context`.
-    - Runs a demo query: `"What is Agentic RAG?"` and prints the result.
-
-### Python Environment Variables
-
-Create `backend/RAG/.env` (or reuse root `.env` if you prefer) with:
-
-```bash
-GROQ_API_KEY=your-groq-api-key
-SERPER_API_KEY=your-serper-api-key
-GEMINI_API_KEY=your-gemini-api-key
-```
-
-### Running the Python Demo
-
-From `backend/RAG/` (after installing the appropriate Python dependencies):
-
-```bash
-python main.py
-```
-
-This will build the local vector store from `document.txt` and run the sample query printed in the script.
-
-> **Note:** The Python file as committed appears to contain a minor syntax/line‑break issue in the Gemini model string; you may need to correct that before running.
+- **Auth** — register / login with JWT-secured routes
+- **Notes** — upload PDF/DOCX/TXT files; view, edit, and delete notes
+- **Chat** — per-note AI chat sessions with full history, rename, delete
+- **Multi-LLM** — per-user choice of Groq (Llama 3.3 70B), Google Gemini 2.0 Flash, or Anthropic Claude 3.5 Haiku
+- **Web search** — if the document doesn't contain the answer, the agent falls back to a live Serper + CrewAI web-scraping crew
+- **Encrypted key storage** — all API keys stored AES-256 encrypted, decrypted server-side only at request time
+- **Settings** — users store their own LLM, Serper, and Pinecone keys; the system adapts automatically
 
 ---
 
-## Frontend Details (`frontend/`)
+## Project Structure
 
-### Tech Stack
-
-- **Framework**: React 19 + TypeScript
-- **Bundler/Dev Server**: Vite
-- **Routing**: `react-router` / `react-router-dom`
-- **State Management**: Zustand
-- **UI & Styling**:
-  - Custom UI primitives (`button`, `card`, `input`, `label`) built with Radix + Tailwind‑inspired utilities.
-  - Global and page‑specific CSS (`App.css`, `index.css`, `styles/*.css`).
-  - Centralized color system documented in `src/styles/README.md`.
-
-### Application Routing (`src/App.tsx`)
-
-- Routes defined with `BrowserRouter`:
-  - `/` → redirects to `/option`.
-  - `/option` → `Option` page (entry to upload or chat).
-  - `/notes` → `NotesPage` (list of all notes).
-  - `/notes/:noteId` → `EditNote` (view/edit selected note).
-  - `/notes/chat/:noteId` → `Chat` (chat with selected note).
-
-### Global Entry (`src/main.tsx`)
-
-- Standard Vite/React entry that renders `<App />` into `#root` with `StrictMode`.
-
-### State Store (`src/store/store.tsx`)
-
-- Lightweight Zustand store with a single slice:
-  - `isEditEnabled` (boolean).
-  - Actions: `setIsEditEnabled`, `enableEdit`, `disableEdit`.
-- Used to control whether `EditNote` opens in editing mode when navigated from `NotesPage`.
-
-### Pages
-
-- **`Option` (`src/pages/option.tsx`)**
-  - Landing page with two primary cards:
-    - **Upload Notes** – form UI for note title and document upload (currently no API call wired yet).
-    - **Chat with Notes** – explanation and CTA.
-  - On clicking **Start Chatting**, navigates to `/notes`.
-
-- **`NotesPage` (`src/pages/notesPage.tsx`)**
-  - Displays a list of notes (currently **hardcoded sample data** with realistic metadata fields matching the backend schema).
-  - Each note card supports:
-    - Expand/collapse to show metadata (pages, size, file type, uploaded date, text length).
-    - View note: navigates to `/notes/:noteId` in view mode.
-    - Edit note: toggles edit mode in the Zustand store and navigates to `/notes/:noteId`.
-    - Delete: UI button only (no backend call yet).
-    - Chat: navigates to `/notes/chat/:noteId`.
-
-- **`EditNote` (`src/pages/editNote.tsx`)**
-  - Reads `noteId` from route params.
-  - On mount:
-    - Calls `fetchData()` which currently simulates note data (`"Note {noteId}"`, placeholder content).
-    - If `isEditEnabled` is true, enters editing mode immediately.
-  - Supports:
-    - Toggling between **view** and **edit** states.
-    - Tracking unsaved changes and displaying an "Unsaved changes" badge.
-    - Simulated save operation (with a `setTimeout`); in a real app this would call the backend `PUT /api/note/:noteId`.
-    - Cancel: discards in‑memory edits and reloads simulated data.
-
-- **`Chat` (`src/pages/chat.tsx`)**
-  - Chat UI bound to a **specific note** (`noteId` route param).
-  - Maintains a message list, input field, and typing indicator.
-  - Currently uses a **simulated assistant reply** after a delay with a note about integrating a real RAG backend.
-  - Ready to connect to an API endpoint (e.g., `/api/chat/:noteId`) that would:
-    - Retrieve the relevant note.
-    - Perform RAG over the note (via Python or Pinecone/Node).
-
-### Styling & Design System
-
-- **`src/styles/colors.css` and `src/styles/README.md`**:
-  - Define an **industry‑level color system** using CSS custom properties.
-  - Offer semantic tokens for backgrounds, text, borders, shadows, and component‑specific colors.
-  - Includes guidance for dark mode, semantics (success, warning, error, info), and best practices.
-- Page‑specific CSS (`option.css`, `notes.css`, `editNote.css`, `chat.css`) build on top of those variables to create a modern, visually rich UI.
-
-### Frontend Scripts
-
-From `frontend/`:
-
-```bash
-npm install
-npm run dev      # start Vite dev server
-npm run build    # type‑check and build
-npm run preview  # serve built app
+```
+AgentRAG/
+├── backend/
+│   ├── index.ts              # Express app, MongoDB connection
+│   ├── routes/routes.ts      # All REST endpoints
+│   ├── middleware/
+│   │   ├── auth.ts           # JWT authentication
+│   │   └── upload.ts         # Multer file upload
+│   ├── model/
+│   │   ├── user.ts           # User schema (email, password, encrypted keys, llmProvider)
+│   │   ├── notes.ts          # Note schema (title, content, metadata)
+│   │   └── chat.ts           # ChatSession + ChatMessage schemas
+│   ├── services/
+│   │   ├── embeddingService.ts  # HuggingFace / Pinecone embedding helpers
+│   │   └── vectorService.ts     # Pinecone upsert / query / delete
+│   ├── utils/
+│   │   ├── encryption.ts     # AES-256 encrypt/decrypt/mask
+│   │   └── fileProcessor.ts  # Extract text from uploaded files
+│   ├── RAG/
+│   │   ├── api.py            # FastAPI service — per-request LLM + RAG + CrewAI
+│   │   ├── main.py           # Standalone demo (FAISS + HuggingFace)
+│   │   └── requirements.txt
+│   └── pinecone.ts           # Low-level Pinecone client helpers
+│
+├── frontend/
+│   └── src/
+│       ├── pages/
+│       │   ├── landing.tsx   # Public marketing page
+│       │   ├── login.tsx / register.tsx
+│       │   ├── option.tsx    # Dashboard (upload or chat)
+│       │   ├── notesPage.tsx # Note list
+│       │   ├── editNote.tsx  # View / edit a note
+│       │   ├── chat.tsx      # Chat with a note
+│       │   └── settings.tsx  # API key management
+│       ├── services/api.ts   # Axios client + all API helpers
+│       ├── store/store.tsx   # Zustand (edit-mode flag)
+│       ├── components/ui/    # Button, Input, Card, Toast, ConfirmModal
+│       └── styles/           # Per-page CSS + global color tokens
+│
+└── setup.sh                  # One-shot setup script
 ```
 
 ---
 
-## Running the Project Locally
+## Quick Start
 
 ### Prerequisites
 
-- Node.js (LTS recommended)
-- npm (or compatible package manager)
-- MongoDB instance (local or remote)
-- Python 3.10+ (if you want to run the Python RAG demo)
+- Node.js 18+
+- MongoDB (local or Atlas)
+- Python 3.10+
+- A Pinecone account (free tier works)
+- At least one LLM API key (Groq free tier recommended to start)
 
-### 1. Backend Setup
+### 1 — Run setup script
 
 ```bash
-cd backend
-npm install
+chmod +x setup.sh && ./setup.sh
+```
 
-# create .env
-cat > .env << 'EOF'
-MONGODB_URI=mongodb://localhost:27017/agentrag
+This installs all Node and Python dependencies and creates `.env` templates in `backend/` and `backend/RAG/`.
+
+### 2 — Configure environment
+
+**`backend/.env`**
+```env
+MONGODB_URI=mongodb://localhost:27017/docpal
 PORT=3000
-PINECONE_API_KEY=your-pinecone-api-key
-EOF
-
-# start backend
-npm run dev
+JWT_SECRET=change-me-in-production
+RAG_SERVICE_URL=http://localhost:8000
+CORS_ORIGIN=http://localhost:5173
 ```
 
-Backend will be available at:
+**`backend/RAG/.env`** *(optional — users can also supply keys through the Settings UI)*
+```env
+GROQ_API_KEY=gsk_...
+GEMINI_API_KEY=AIza...
+SERPER_API_KEY=...
+```
 
-- Health check: `GET http://localhost:3000/`
-- API base: `http://localhost:3000/api`
+**`frontend/.env`**
+```env
+VITE_API_BASE_URL=http://localhost:3000/api
+```
 
-### 2. Frontend Setup
+### 3 — Start services
+
+Open three terminals:
 
 ```bash
-cd frontend
-npm install
-npm run dev
+# Terminal 1 — Node backend
+cd backend && npm run dev
+
+# Terminal 2 — Python RAG service
+cd backend/RAG && source venv/bin/activate && uvicorn api:app --reload --port 8000
+
+# Terminal 3 — Frontend
+cd frontend && npm run dev
 ```
 
-Vite dev server will typically run at `http://localhost:5173/` (or the next available port). The frontend is currently configured to work with simulated data; to integrate the backend, you would add Axios calls to the appropriate endpoints.
-
-### 3. Python RAG Demo (Optional)
-
-- Create and activate a Python virtual environment.
-- Install dependencies similar to:
-
-```bash
-pip install langchain langchain-community langchain-text-splitters langchain-huggingface langchain-groq crewai crewai-tools faiss-cpu python-dotenv
-```
-
-- Add a `.env` file with your `GROQ_API_KEY`, `SERPER_API_KEY`, and `GEMINI_API_KEY`.
-- Run:
-
-```bash
-cd backend/RAG
-python main.py
-```
+App is available at **http://localhost:5173**.
 
 ---
 
-## How to Extend / Integrate End‑to‑End
+## API Reference
 
-This repo is intentionally structured as a **prototype**. To make it fully production‑ready, you can extend it along these lines:
+All routes (except auth and public) require `Authorization: Bearer <token>`.
 
-- **Wire Frontend to Backend**
-  - Replace simulated data in `NotesPage`, `EditNote`, and `Chat` with Axios calls to:
-    - `GET /api/notes/:userId`, `GET /api/note/:noteId`, `POST /api/note`, `PUT /api/note/:noteId`, `DELETE /api/note/:noteId`.
-  - Add basic authentication and token storage to associate notes with real users.
+### Auth
+| Method | Path | Description |
+|--------|------|-------------|
+| POST | `/api/user` | Register |
+| POST | `/api/auth/login` | Login → returns JWT |
 
-- **Expose RAG/Chat Endpoint in Backend**
-  - Create an endpoint such as `POST /api/chat/:noteId` that:
-    - Loads the note content from MongoDB.
-    - Either:
-      - Calls the Python RAG service (via HTTP or a local process), or
-      - Uses Pinecone helpers + an LLM SDK in Node to perform retrieval + generation.
+### Notes
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/api/notes/:userId` | List user's notes |
+| GET | `/api/note/:noteId` | Get single note |
+| POST | `/api/note/upload` | Upload file → create note |
+| PUT | `/api/note/:noteId` | Update title / content |
+| DELETE | `/api/note/:noteId` | Delete note + embeddings |
 
-- **Synchronize Notes with Pinecone / Vector DB**
-  - When a note is created or updated:
-    - Generate embeddings for its content.
-    - Call `upsertVectors` to store/update vectors in Pinecone with metadata like `noteId`, `userId`.
-  - When a note is deleted:
-    - Call `deleteVectors` to remove its vectors.
+### Chat
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/api/chat/sessions/:noteId` | List sessions for a note |
+| POST | `/api/chat/sessions/:noteId` | Create new session |
+| PUT | `/api/chat/sessions/:sessionId` | Rename session |
+| DELETE | `/api/chat/sessions/:sessionId` | Delete session |
+| GET | `/api/chat/messages/:sessionId` | Get messages |
+| POST | `/api/chat/messages/:sessionId` | Save a message |
+| POST | `/api/chat/:noteId` | Send message → AI response |
 
-- **Security & Production Hardening**
-  - Hash user passwords (e.g., `bcrypt`) and add proper auth (JWT or session‑based).
-  - Validate and sanitize inputs, add rate limiting and CORS configuration.
-  - Add error reporting, logging, and observability as needed.
+### Settings
+| Method | Path | Description |
+|--------|------|-------------|
+| POST | `/api/user/api-keys` | Save encrypted API keys |
+| GET | `/api/user/api-keys/:userId` | Get masked key status |
+| DELETE | `/api/user/api-keys/:userId` | Delete all keys |
 
 ---
 
-## Project Structure Overview
+## RAG Service (`backend/RAG/api.py`)
 
-```text
-AgentRAG/
-├─ backend/
-│  ├─ index.ts              # Express app + MongoDB connection + route mount
-│  ├─ routes/
-│  │  └─ routes.ts          # User and Notes REST APIs
-│  ├─ model/
-│  │  ├─ user.ts            # User schema (email, password, notes refs)
-│  │  └─ notes.ts           # Notes schema (title, content, metadata)
-│  ├─ pinecode.ts           # Pinecone client + index helpers
-│  ├─ RAG/
-│  │  ├─ main.py            # Python agentic RAG pipeline
-│  │  └─ document.txt       # Sample document for vector DB
-│  ├─ package.json          # Backend dependencies and scripts
-│  └─ tsconfig.json         # TypeScript config for backend
-│
-├─ frontend/
-│  ├─ index.html
-│  ├─ src/
-│  │  ├─ main.tsx           # React entrypoint
-│  │  ├─ App.tsx            # Router configuration
-│  │  ├─ pages/
-│  │  │  ├─ option.tsx      # Landing: upload vs chat
-│  │  │  ├─ notesPage.tsx   # Notes listing and actions
-│  │  │  ├─ editNote.tsx    # Note view/edit UI
-│  │  │  └─ chat.tsx        # Chat UI for RAG
-│  │  ├─ store/
-│  │  │  └─ store.tsx       # Zustand store for edit mode
-│  │  ├─ components/ui/     # Button, card, input, label primitives
-│  │  └─ styles/            # Page styles + color system README
-│  ├─ package.json          # Frontend dependencies and scripts
-│  └─ vite.config.ts        # Vite configuration
-│
-└─ README.md                # Project documentation (this file)
-```
+The Python service receives per-request LLM credentials so each user's keys are used independently.
+
+**Flow for each `/chat` request:**
+
+1. Receives `query`, `context` (from Pinecone), `noteTitle`, `llm_provider`, and relevant API keys.
+2. Builds an LLM instance (`ChatGroq`, `ChatGoogleGenerativeAI`, or `ChatAnthropic`) from the supplied keys.
+3. Asks the LLM whether the provided context is sufficient.
+4. If **yes** → generates an answer from the Pinecone context.
+5. If **no** → runs a two-agent CrewAI crew (web search → scrape) using Serper, then answers from the scraped content.
+
+**Supported providers:**
+
+| Provider | Model | Key env var |
+|----------|-------|-------------|
+| Groq | `llama-3.3-70b-versatile` | `GROQ_API_KEY` |
+| Google Gemini | `gemini-2.0-flash` | `GEMINI_API_KEY` |
+| Anthropic | `claude-3-5-haiku-20241022` | `ANTHROPIC_API_KEY` |
+
+---
+
+## Security Notes
+
+- Passwords hashed with **bcrypt** before storage.
+- All API keys encrypted with **AES-256-CBC** before being written to MongoDB.
+- Keys are decrypted in memory only when a request is being processed and are never returned to the client in plaintext.
+- JWT tokens expire and are validated on every protected route.
 
 ---
 
 ## License
 
-This repository currently declares the **ISC** license in `backend/package.json`. If you plan to open‑source or distribute the entire project, you may want to add a top‑level `LICENSE` file and clarify licensing for frontend and Python components as well.
+ISC
+

@@ -1,9 +1,12 @@
 import { Pinecone } from '@pinecone-database/pinecone';
+import { EMBEDDING_DIMENSION } from './services/embeddingService.js';
 import dotenv from 'dotenv';
 
 dotenv.config();
 
 let pineconeClient: Pinecone | null = null;
+let indexCache: Map<string, any> = new Map();
+let indexInitPromise: Promise<any> | null = null;
 
 export const initializePinecone = async (): Promise<Pinecone> => {
   if (pineconeClient) {
@@ -26,40 +29,98 @@ export const initializePinecone = async (): Promise<Pinecone> => {
 
 export const getOrCreateIndex = async (
   indexName: string = 'agentrag-notes',
-  dimension: number = 1536
+  dimension: number = EMBEDDING_DIMENSION
 ) => {
-  const pc = await initializePinecone();
-
-  try {
-    const indexes = await pc.listIndexes();
-    const indexExists = indexes.indexes?.some(index => index.name === indexName);
-
-    if (!indexExists) {
-      console.log(`Creating index: ${indexName}`);
-      
-      await pc.createIndex({
-        name: indexName,
-        dimension: dimension,
-        metric: 'cosine',
-        spec: {
-          serverless: {
-            cloud: 'aws',
-            region: 'us-east-1'
-          }
-        },
-        waitUntilReady: true,
-      });
-
-      console.log(`Index ${indexName} created successfully`);
-    } else {
-      console.log(`Index ${indexName} already exists`);
-    }
-
-    return pc.index(indexName);
-  } catch (error) {
-    console.error('Error creating/accessing index:', error);
-    throw error;
+  // If we have a cached index reference, return it
+  if (indexCache.has(indexName)) {
+    return indexCache.get(indexName);
   }
+
+  // If initialization is already in progress, wait for it
+  if (indexInitPromise) {
+    await indexInitPromise;
+    if (indexCache.has(indexName)) {
+      return indexCache.get(indexName);
+    }
+  }
+
+  // Start initialization with a promise to prevent race conditions
+  indexInitPromise = (async () => {
+    const pc = await initializePinecone();
+
+    try {
+      const indexes = await pc.listIndexes();
+      const existingIndex = indexes.indexes?.find(index => index.name === indexName);
+
+      if (existingIndex) {
+        // Check if dimension matches
+        if (existingIndex.dimension !== dimension) {
+          console.warn(`⚠️  Index ${indexName} has wrong dimension: ${existingIndex.dimension} (expected ${dimension})`);
+          console.log(`Deleting and recreating index with correct dimension...`);
+          
+          // Delete the existing index
+          await pc.deleteIndex(indexName);
+          console.log(`Deleted index ${indexName}`);
+          
+          // Wait for deletion to propagate
+          await new Promise(resolve => setTimeout(resolve, 5000));
+          
+          // Recreate with correct dimension
+          await pc.createIndex({
+            name: indexName,
+            dimension: dimension,
+            metric: 'cosine',
+            spec: {
+              serverless: {
+                cloud: 'aws',
+                region: 'us-east-1'
+              }
+            },
+            waitUntilReady: true,
+          });
+          
+          console.log(`✅ Recreated index ${indexName} with dimension ${dimension}`);
+        } else {
+          console.log(`✅ Index ${indexName} exists with correct dimension (${dimension})`);
+        }
+      } else {
+        console.log(`Creating index: ${indexName} with dimension ${dimension}`);
+        
+        await pc.createIndex({
+          name: indexName,
+          dimension: dimension,
+          metric: 'cosine',
+          spec: {
+            serverless: {
+              cloud: 'aws',
+              region: 'us-east-1'
+            }
+          },
+          waitUntilReady: true,
+        });
+
+        console.log(`✅ Index ${indexName} created successfully`);
+      }
+
+      const index = pc.index(indexName);
+      indexCache.set(indexName, index);
+      return index;
+    } catch (error: any) {
+      // Handle "ALREADY_EXISTS" error gracefully - just use the index
+      if (error.message?.includes('ALREADY_EXISTS') || error.code === 'ALREADY_EXISTS') {
+        console.log(`Index ${indexName} exists (from concurrent request), using it`);
+        const index = pc.index(indexName);
+        indexCache.set(indexName, index);
+        return index;
+      }
+      console.error('Error creating/accessing index:', error);
+      throw error;
+    }
+  })();
+
+  const result = await indexInitPromise;
+  indexInitPromise = null;
+  return result;
 };
 
 export const upsertVectors = async (

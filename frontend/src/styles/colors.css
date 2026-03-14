@@ -185,11 +185,11 @@
   --color-input-text: var(--color-gray-900);
   --color-input-placeholder: var(--color-gray-400);
 
-  /* ===== Gradient Backgrounds ===== */
-  --gradient-primary: linear-gradient(to bottom right, var(--color-gray-50), var(--color-accent-blue-50), var(--color-accent-indigo-50));
-  --gradient-blue: linear-gradient(to right, var(--color-accent-blue-600), var(--color-accent-indigo-600));
-  --gradient-purple: linear-gradient(to right, var(--color-accent-purple-500), var(--color-accent-indigo-600));
-  --gradient-success: linear-gradient(to right, var(--color-success-500), var(--color-success-600));
+  /* ===== Gradient Backgrounds (flattened to solid colors) ===== */
+  --gradient-primary: var(--color-gray-50);
+  --gradient-blue: var(--color-accent-blue-600);
+  --gradient-purple: var(--color-accent-indigo-600);
+  --gradient-success: var(--color-success-500);
 }
 
 /* ===== Dark Mode ===== */
@@ -235,6 +235,6 @@
   --color-input-border: var(--color-gray-600);
   --color-input-text: var(--color-gray-50);
 
-  /* Gradients */
-  --gradient-primary: linear-gradient(to bottom right, var(--color-gray-900), var(--color-gray-800), var(--color-gray-700));
+  /* Gradients (dark mode - flattened to solid) */
+  --gradient-primary: var(--color-gray-900);
 }

@@ -1,7 +1,16 @@
 import { upsertVectors, queryVectors, deleteVectors } from '../pinecone.js';
-import { generateEmbedding, chunkText, generateEmbeddingsForChunks } from './embeddingService.js';
+import { generateEmbedding, chunkText, generateEmbeddingsForChunks, EMBEDDING_DIMENSION } from './embeddingService.js';
 
 const INDEX_NAME = process.env.PINECONE_INDEX_NAME || 'agentrag-notes';
+
+/**
+ * Check if vector service is available (Pinecone configured - embeddings have HuggingFace fallback)
+ */
+export const isVectorServiceAvailable = (): boolean => {
+    // Embeddings always available now (HuggingFace fallback)
+    // Only need to check Pinecone
+    return !!process.env.PINECONE_API_KEY;
+};
 
 /**
  * Store note content in Pinecone vector database
@@ -93,8 +102,8 @@ export const queryNoteContent = async (
  */
 export const deleteNoteEmbeddings = async (noteId: string): Promise<void> => {
     try {
-        // Query to find all chunk IDs for this note
-        const results = await queryVectors(INDEX_NAME, Array(1536).fill(0), 1000, { noteId });
+        // Query to find all chunk IDs for this note using a zero vector
+        const results = await queryVectors(INDEX_NAME, Array(EMBEDDING_DIMENSION).fill(0), 1000, { noteId });
         
         if (results.matches && results.matches.length > 0) {
             const ids = results.matches.map((match: any) => match.id);

@@ -1,7 +1,6 @@
-// @ts-ignore - pdf-parse has ESM/CJS compatibility issues
-import pdfParse from 'pdf-parse';
 import mammoth from 'mammoth';
 import fs from 'fs/promises';
+import { PDFParse } from 'pdf-parse';
 
 export interface ProcessedFile {
     text: string;
@@ -16,16 +15,23 @@ export interface ProcessedFile {
 }
 
 /**
- * Extract text from PDF file
+ * Extract text from PDF file using pdf-parse v2
+ * pdf-parse v2 requires `url` option in constructor
  */
 export const extractTextFromPDF = async (filePath: string): Promise<{ text: string; pages: number }> => {
     try {
-        const dataBuffer = await fs.readFile(filePath);
-        const data = await pdfParse(dataBuffer);
+        // pdf-parse v2 uses `url` option to specify the file path
+        const pdfParser = new PDFParse({ url: filePath } as any);
+        
+        // getText returns { pages: [], text: string, total: number }
+        const result = await pdfParser.getText() as { text: string; total: number };
+        
+        // Clean up resources
+        await pdfParser.destroy();
         
         return {
-            text: data.text,
-            pages: data.numpages
+            text: result.text?.trim() || '',
+            pages: result.total || 1
         };
     } catch (error) {
         console.error('Error extracting text from PDF:', error);

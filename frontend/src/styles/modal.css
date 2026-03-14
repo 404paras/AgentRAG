@@ -1,0 +1,210 @@
+/* Modal Backdrop */
+.modal-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 10000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(0, 0, 0, 0.5);
+    backdrop-filter: blur(4px);
+    animation: fadeIn 0.2s ease-out;
+    padding: 1rem;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+/* Modal Container */
+.modal-container {
+    position: relative;
+    background: var(--color-background-primary);
+    border-radius: 16px;
+    box-shadow: var(--shadow-2xl);
+    max-width: 400px;
+    width: 100%;
+    padding: 1.5rem;
+    animation: modalSlideIn 0.3s ease-out;
+}
+
+@keyframes modalSlideIn {
+    from {
+        opacity: 0;
+        transform: scale(0.95) translateY(-20px);
+    }
+    to {
+        opacity: 1;
+        transform: scale(1) translateY(0);
+    }
+}
+
+/* Close Button */
+.modal-close-btn {
+    position: absolute;
+    top: 1rem;
+    right: 1rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0.5rem;
+    border: none;
+    background: transparent;
+    color: var(--color-text-tertiary);
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.modal-close-btn:hover {
+    background: var(--color-background-hover);
+    color: var(--color-text-primary);
+}
+
+.modal-close-btn:disabled {
+    cursor: not-allowed;
+    opacity: 0.5;
+}
+
+/* Modal Content */
+.modal-content {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    padding: 1rem 0;
+}
+
+/* Modal Icon */
+.modal-icon {
+    width: 56px;
+    height: 56px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-bottom: 1rem;
+}
+
+.modal-icon-danger {
+    background: var(--color-error-100);
+    color: var(--color-error-600);
+}
+
+.modal-icon-warning {
+    background: var(--color-warning-100);
+    color: var(--color-warning-600);
+}
+
+.modal-icon-info {
+    background: var(--color-accent-blue-100);
+    color: var(--color-accent-blue-600);
+}
+
+/* Modal Text */
+.modal-text {
+    max-width: 320px;
+}
+
+.modal-title {
+    font-size: 1.25rem;
+    font-weight: 600;
+    color: var(--color-text-primary);
+    margin-bottom: 0.5rem;
+}
+
+.modal-message {
+    font-size: 0.9375rem;
+    color: var(--color-text-secondary);
+    line-height: 1.5;
+    margin: 0;
+}
+
+/* Modal Actions */
+.modal-actions {
+    display: flex;
+    gap: 0.75rem;
+    margin-top: 1.5rem;
+    width: 100%;
+}
+
+.modal-actions button {
+    flex: 1;
+    padding: 0.75rem 1rem;
+    font-size: 0.9375rem;
+    font-weight: 600;
+    border-radius: 10px;
+}
+
+.modal-btn-cancel {
+    cursor: pointer;
+}
+
+.modal-btn-cancel:hover {
+    cursor: pointer;
+}
+
+.modal-btn-danger {
+    background: var(--color-error-600) !important;
+    color: white !important;
+    border: none !important;
+}
+
+.modal-btn-danger:hover:not(:disabled) {
+    background: var(--color-error-700) !important;
+}
+
+.modal-btn-warning {
+    background: var(--color-warning-600) !important;
+    color: white !important;
+    border: none !important;
+}
+
+.modal-btn-warning:hover:not(:disabled) {
+    background: var(--color-warning-700) !important;
+}
+
+.modal-btn-info {
+    background: var(--color-accent-blue-600) !important;
+    color: white !important;
+    border: none !important;
+}
+
+.modal-btn-info:hover:not(:disabled) {
+    background: var(--color-accent-blue-700) !important;
+}
+
+/* Spinner */
+.modal-spinner {
+    display: inline-block;
+    width: 16px;
+    height: 16px;
+    border: 2px solid rgba(255, 255, 255, 0.3);
+    border-top-color: white;
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+    margin-right: 0.5rem;
+}
+
+@keyframes spin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+/* Responsive */
+@media (max-width: 480px) {
+    .modal-container {
+        padding: 1.25rem;
+        margin: 0.5rem;
+    }
+
+    .modal-actions {
+        flex-direction: column-reverse;
+    }
+
+    .modal-actions button {
+        width: 100%;
+    }
+}

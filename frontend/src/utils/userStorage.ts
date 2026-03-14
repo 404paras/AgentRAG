@@ -1,7 +1,5 @@
-// Simple user storage using localStorage
-// In production, this would use proper authentication
-
-const USER_STORAGE_KEY = 'agentrag_user';
+const USER_KEY = 'docpal_user';
+const TOKEN_KEY = 'docpal_token';
 
 export interface StoredUser {
     _id: string;
@@ -9,11 +7,11 @@ export interface StoredUser {
 }
 
 export const saveUser = (user: StoredUser): void => {
-    localStorage.setItem(USER_STORAGE_KEY, JSON.stringify(user));
+    localStorage.setItem(USER_KEY, JSON.stringify(user));
 };
 
 export const getUser = (): StoredUser | null => {
-    const stored = localStorage.getItem(USER_STORAGE_KEY);
+    const stored = localStorage.getItem(USER_KEY);
     if (!stored) return null;
     try {
         return JSON.parse(stored);
@@ -23,11 +21,27 @@ export const getUser = (): StoredUser | null => {
 };
 
 export const clearUser = (): void => {
-    localStorage.removeItem(USER_STORAGE_KEY);
+    localStorage.removeItem(USER_KEY);
 };
 
 export const getUserId = (): string => {
     const user = getUser();
-    // For demo purposes, return a default user ID if not found
-    return user?._id || 'demo-user-id';
+    return user?._id || '';
+};
+
+export const saveToken = (token: string): void => {
+    localStorage.setItem(TOKEN_KEY, token);
+};
+
+export const getToken = (): string | null => {
+    return localStorage.getItem(TOKEN_KEY);
+};
+
+export const clearToken = (): void => {
+    localStorage.removeItem(TOKEN_KEY);
+};
+
+export const clearAll = (): void => {
+    clearUser();
+    clearToken();
 };

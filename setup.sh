@@ -20,7 +20,7 @@ PORT=3000
 NODE_ENV=development
 PINECONE_API_KEY=your-pinecone-api-key-here
 PINECONE_INDEX_NAME=agentrag-notes
-OPENAI_API_KEY=your-openai-api-key-here
+GEMINI_API_KEY=your-gemini-api-key-here
 JWT_SECRET=your-super-secret-jwt-key-change-this-in-production
 RAG_SERVICE_URL=http://localhost:8000
 CORS_ORIGIN=http://localhost:5173
@@ -116,4 +116,4 @@ echo "4. Run: npm run dev (in backend directory)"
 echo "5. Run: python api.py (in backend/RAG directory with venv activated)"
 echo "6. Run: npm run dev (in frontend directory)"
 echo ""
-echo "📖 See SETUP.md for detailed instructions"
+echo "📖 See README.md for full documentation"
